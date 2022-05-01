@@ -23,10 +23,15 @@
 #endif
 
 #include "imp.h"
+#include <helper/binarybuffer.h>
 #include <target/algorithm.h>
 #include <target/armv7m.h>
 #include <helper/types.h>
 #include <helper/time_support.h>
+
+/* Both those values are constant across the current spectrum ofr nRF5 devices */
+#define WATCHDOG_REFRESH_REGISTER       0x40010600
+#define WATCHDOG_REFRESH_VALUE          0x6e524635
 
 enum {
 	NRFX_FLASH_BASE = 0x00000000,
@@ -255,7 +260,7 @@ static const uint32_t nrf91_ficr_registers[] = {
 
 static inline uint32_t nrfx_uicr_base(int family)
 {
-	switch(family) {
+	switch (family) {
 	case 51:
 	case 52:
 		return NRF5_UICR_BASE;
@@ -1130,11 +1135,15 @@ static int nrfx_ll_flash_write(struct nrfx_info *chip, uint32_t offset, const ui
 	init_reg_param(&reg_params[1], "r1", 32, PARAM_OUT);	/* buffer start */
 	init_reg_param(&reg_params[2], "r2", 32, PARAM_OUT);	/* buffer end */
 	init_reg_param(&reg_params[3], "r3", 32, PARAM_IN_OUT);	/* target address */
+	init_reg_param(&reg_params[4], "r6", 32, PARAM_OUT);	/* watchdog refresh value */
+	init_reg_param(&reg_params[5], "r7", 32, PARAM_OUT);	/* watchdog refresh register address */
 
 	buf_set_u32(reg_params[0].value, 0, 32, bytes);
 	buf_set_u32(reg_params[1].value, 0, 32, source->address);
 	buf_set_u32(reg_params[2].value, 0, 32, source->address + source->size);
 	buf_set_u32(reg_params[3].value, 0, 32, address);
+	buf_set_u32(reg_params[4].value, 0, 32, WATCHDOG_REFRESH_VALUE);
+	buf_set_u32(reg_params[5].value, 0, 32, WATCHDOG_REFRESH_REGISTER);
 
 	retval = target_run_flash_async_algorithm(target, buffer, bytes/4, 4,
 			0, NULL,
@@ -1150,6 +1159,8 @@ static int nrfx_ll_flash_write(struct nrfx_info *chip, uint32_t offset, const ui
 	destroy_reg_param(&reg_params[1]);
 	destroy_reg_param(&reg_params[2]);
 	destroy_reg_param(&reg_params[3]);
+	destroy_reg_param(&reg_params[4]);
+	destroy_reg_param(&reg_params[5]);
 
 	return retval;
 }
@@ -1345,7 +1356,7 @@ static int nrfx_flash_bank_command(struct flash_bank *bank, int family)
 
 		chip->target = bank->target;
 		chip->family = family;
-		switch(family) {
+		switch (family) {
 		case 51:
 			chip->ficr_registers = nrf51_ficr_registers;
 			chip->uicr_registers = nrf51_uicr_registers;
@@ -1458,20 +1469,20 @@ COMMAND_HANDLER(nrf5_handle_mass_erase_command)
 }
 
 #ifndef cat
-#define cat(a,b) a ## b
+#define cat(a, b) a ## b
 #endif
 
 #ifndef xcat
-#define xcat(a,b) cat(a,b)
+#define xcat(a, b) cat(a, b)
 #endif
 
 #define ficr_addr(r, f) \
-	xcat(xcat(nrf,f),_ficr_registers)[NRFX_FICR_ ## r]
+	xcat(xcat(nrf, f), _ficr_registers)[NRFX_FICR_ ## r]
 
 #define ficr5_addr(r) ficr_addr(r, 5)
 
 #define uicr_addr(r, f) \
-	xcat(xcat(nrf,f),_uicr_registers)[NRFX_UICR_ ## r]
+	xcat(xcat(nrf, f), _uicr_registers)[NRFX_UICR_ ## r]
 
 #define uicr5_addr(r) uicr_addr(r, 5)
 
